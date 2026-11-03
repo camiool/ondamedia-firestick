@@ -1,0 +1,29 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'cl.ondamedia.tv'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'cl.ondamedia.tv'
+        minSdk 22          // Fire TV Stick (Fire OS 5 en adelante)
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            // Firmado con la clave debug para poder instalarlo directo (sideload)
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
