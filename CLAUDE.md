@@ -6,11 +6,11 @@ gratuito) a pantalla completa y se maneja con el control remoto. Se instala por 
 la Amazon Appstore. El usuario habla español: responde y escribe los textos de la app en español.
 
 ## Estado actual
-- El proyecto está completo, pero **nunca se ha compilado con Gradle ni se ha probado en un
-  dispositivo**. Se creó en un entorno en la nube sin Android SDK y sin acceso a ondamedia.cl.
-- Lo único verificado: los `.java` compilan con `javac` contra un `android.jar` de API 34 (solo
-  hay avisos de APIs obsoletas). Nunca se han ejecutado aapt2, el manifiesto, los recursos ni
-  `lint`.
+- El proyecto está en https://github.com/camiool/ondamedia-firestick (rama `main`).
+- `./gradlew assembleRelease` **compila sin errores en GitHub Actions** y genera el APK como
+  artefacto `Ondamedia-FireTV`.
+- **Todavía no se ha probado en un Fire TV**, ni contra el sitio real (el entorno donde se creó
+  no tenía acceso a ondamedia.cl).
 - Los PNG del ícono y del banner se generaron con un script y son provisionales.
 
 ## Estructura
@@ -41,7 +41,7 @@ la Amazon Appstore. El usuario habla español: responde y escribe los textos de 
 | Atrás | Sale de pantalla completa → `goBack()` → doble pulsación para salir. |
 
 ## Próximos pasos
-1. **Compilar:** `./gradlew assembleRelease`. Requiere el Android SDK (API 34) y JDK 17, con
+1. **Compilar localmente** (en CI ya funciona): `./gradlew assembleRelease`. Requiere el Android SDK (API 34) y JDK 17, con
    `ANDROID_HOME` definido o un `local.properties` con `sdk.dir=...`. Corrige lo que falle (lint,
    recursos, etc.).
 2. **Probar.** Si el usuario tiene el Fire TV en la misma red, usa
