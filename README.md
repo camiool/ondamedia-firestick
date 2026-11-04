@@ -1,18 +1,22 @@
 # Ondamedia para Fire TV
 
-App sencilla que abre **https://ondamedia.cl** a pantalla completa en el Fire TV Stick,
-con un cursor que se maneja con el control remoto.
+App que abre **https://ondamedia.cl** a pantalla completa en el Fire TV Stick y se maneja
+como una app de TV: las flechas saltan entre películas y botones (un marco blanco marca la
+selección), sin cursor.
 
 ## Controles
 
 | Botón del control | Acción |
 |---|---|
-| Flechas | Mueven el cursor (mantén presionado para ir más rápido). En los bordes desplazan la página. |
-| Botón central (OK) | Clic donde está el cursor |
-| Menú (≡) | Activa/desactiva el cursor (sin cursor, las flechas saltan entre enlaces) |
+| Flechas | Mueven la selección entre películas, filas y botones. Al llegar al borde de una fila, el carrusel avanza solo. |
+| Botón central (OK) | Abre lo seleccionado. En un campo de texto abre el teclado. |
+| OK / flechas en el video | Pausa o reanuda / adelanta o retrocede |
+| Menú (≡) | Activa o desactiva el cursor libre, por si algo no se puede seleccionar con las flechas |
 | Play/Pausa | Pausa o reanuda el video |
-| ⏩ / ⏪ | Adelanta / retrocede 15 segundos |
-| Atrás | Sale de pantalla completa → página anterior → (dos veces) cierra la app |
+| ⏩ / ⏪ | Adelanta / retrocede |
+| Atrás | Cierra el video → página anterior (vuelve a la película donde estabas) → (dos veces) cierra la app |
+
+Al abrir "Ver ahora" o "Trailer", el video pasa solo a pantalla completa.
 
 ## 1. Obtener el APK
 
