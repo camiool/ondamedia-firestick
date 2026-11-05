@@ -19,6 +19,8 @@ public class LoginActivity extends Activity {
 
     /** Pantalla que se abre después de iniciar sesión (p. ej. el reproductor). */
     static final String EXTRA_NEXT = "next";
+    /** Marca que la pantalla siguiente se abrió recién iniciada la sesión (evita ciclos). */
+    static final String EXTRA_AFTER_LOGIN = "after_login";
 
     private EditText email, password;
     private TextView error;
@@ -72,7 +74,7 @@ public class LoginActivity extends Activity {
             public void ok(Void result) {
                 Toast.makeText(LoginActivity.this, "Sesión iniciada", Toast.LENGTH_SHORT).show();
                 Intent next = getIntent().getParcelableExtra(EXTRA_NEXT);
-                if (next != null) startActivity(next);
+                if (next != null) startActivity(next.putExtra(EXTRA_AFTER_LOGIN, true));
                 finish();
             }
 

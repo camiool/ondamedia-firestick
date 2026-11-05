@@ -11,8 +11,8 @@ android {
         applicationId 'cl.ondamedia.tv.nativa'
         minSdk 22          // Fire TV Stick (Fire OS 5 en adelante)
         targetSdk 34
-        versionCode 1
-        versionName '2.0-nativa'
+        versionCode 2
+        versionName '2.1-nativa'
     }
 
     buildTypes {

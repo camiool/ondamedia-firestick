@@ -71,7 +71,7 @@ public final class Api {
     }
 
     public void logout() {
-        prefs.edit().remove("token").apply();
+        prefs.edit().remove("token").remove("profile").apply();
     }
 
     public void login(String email, String password, Callback<Void> cb) {
@@ -87,9 +87,68 @@ public final class Api {
             if (data != null) token = data.optString("access_token", null);
             if (token == null) token = res.optString("access_token", null);
             if (token == null || token.isEmpty()) throw new ApiException(loginError(res));
-            prefs.edit().putString("token", token).putString("email", email).apply();
+            // El perfil puede venir en la respuesta; si no, ensureProfile() lo busca después.
+            String profile = null;
+            JSONObject inner = data != null ? data.optJSONObject("data") : null;
+            if (inner != null) profile = str(inner, "profileId");
+            prefs.edit().putString("token", token).putString("email", email)
+                    .putString("profile", profile).apply();
+            ensureProfile();
             return null;
         });
+    }
+
+    /**
+     * El sitio manda el perfil del usuario ("x-profile-id") en cada consulta, y sin él la API no
+     * entrega el token de los videos. Lo sacamos del token de sesión (un JWT) o, si no viene ahí,
+     * de la lista de perfiles de la cuenta (el del titular).
+     */
+    private void ensureProfile() throws Exception {
+        if (prefs.getString("profile", null) != null || !isLoggedIn()) return;
+        String profile = profileFromJwt(prefs.getString("token", ""));
+        if (profile == null) {
+            JSONObject data = graphql("query { getProfiles { _id isOwner } }", null);
+            JSONArray list = data.optJSONArray("getProfiles");
+            if (list != null) {
+                for (int i = 0; i < list.length(); i++) {
+                    JSONObject p = list.getJSONObject(i);
+                    if (profile == null || p.optBoolean("isOwner")) profile = str(p, "_id");
+                    if (p.optBoolean("isOwner")) break;
+                }
+            }
+        }
+        if (profile != null) prefs.edit().putString("profile", profile).apply();
+    }
+
+    /** ¿La API sigue reconociendo la sesión? (pide los datos de la cuenta). */
+    private boolean sessionStillValid() {
+        try {
+            JSONObject data = graphql("query { getCustomer { _id } }", null);
+            JSONObject c = data.optJSONObject("getCustomer");
+            return c != null && !c.isNull("_id");
+        } catch (ApiException e) {
+            String m = e.getMessage() == null ? "" : e.getMessage().toUpperCase();
+            return !(m.contains("UNAUTH") || m.contains("TOKEN") || m.contains("JWT") || m.contains("LOGIN"));
+        } catch (Exception e) {
+            return true;  // sin red u otro problema: no cerramos la sesión por eso
+        }
+    }
+
+    private static String profileFromJwt(String jwt) {
+        try {
+            String[] parts = jwt.split("\\.");
+            if (parts.length < 2) return null;
+            String json = new String(android.util.Base64.decode(parts[1],
+                    android.util.Base64.URL_SAFE | android.util.Base64.NO_WRAP | android.util.Base64.NO_PADDING),
+                    StandardCharsets.UTF_8);
+            JSONObject payload = new JSONObject(json);
+            JSONObject data = payload.optJSONObject("data");
+            JSONObject customer = data != null ? data.optJSONObject("customer") : null;
+            if (customer == null) customer = payload.optJSONObject("customer");
+            return customer != null ? str(customer, "profileId") : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private static String loginError(JSONObject res) {
@@ -207,20 +266,30 @@ public final class Api {
     public void playback(String mediaId, Callback<Playback> cb) {
         run(cb, () -> {
             if (!isLoggedIn()) throw new ApiException(ApiException.LOGIN_REQUIRED);
+            ensureProfile();
             String q = "query($id:String!){ getMedia(_id:$id) { _id title duration accessToken } }";
             JSONObject data;
             try {
                 data = graphql(q, new JSONObject().put("id", mediaId));
             } catch (ApiException e) {
-                if (e.getMessage() != null && e.getMessage().contains("UNAUTHORIZED")) {
-                    logout();  // la sesión venció
+                String msg = e.getMessage() == null ? "" : e.getMessage();
+                // Solo pedimos iniciar sesión de nuevo si la sesión de verdad ya no sirve; si no,
+                // mostramos el error (antes esto hacía un ciclo infinito de inicio de sesión).
+                if (!sessionStillValid()) {
+                    logout();
                     throw new ApiException(ApiException.LOGIN_REQUIRED);
                 }
-                throw e;
+                throw new ApiException("Ondamedia no entregó este video (" + msg + ").");
             }
             JSONObject m = data.getJSONObject("getMedia");
-            String token = m.optString("accessToken", "");
-            if (token.isEmpty() || "null".equals(token)) throw new ApiException(ApiException.LOGIN_REQUIRED);
+            String token = m.isNull("accessToken") ? "" : m.optString("accessToken", "");
+            if (token.isEmpty()) {
+                if (!sessionStillValid()) {
+                    logout();
+                    throw new ApiException(ApiException.LOGIN_REQUIRED);
+                }
+                throw new ApiException("Ondamedia no entregó este video (sin token de acceso).");
+            }
             Playback p = new Playback();
             p.mediaId = mediaId;
             p.title = m.optString("title");
@@ -378,7 +447,12 @@ public final class Api {
             c.setRequestProperty("Accept", "application/json");
             c.setRequestProperty("x-client-id", CLIENT_ID);
             String token = prefs.getString("token", null);
-            if (auth && token != null) c.setRequestProperty("Authorization", "Bearer " + token);
+            if (auth && token != null) {
+                c.setRequestProperty("Authorization", "Bearer " + token);
+                String profile = prefs.getString("profile", null);
+                if (profile != null) c.setRequestProperty("x-profile-id", profile);
+            }
+            c.setRequestProperty("x-ott-language", "es");
             try (OutputStream os = c.getOutputStream()) {
                 os.write(body.getBytes(StandardCharsets.UTF_8));
             }

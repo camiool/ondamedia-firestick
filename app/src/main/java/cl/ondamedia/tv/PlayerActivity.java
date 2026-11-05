@@ -1,6 +1,7 @@
 package cl.ondamedia.tv;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
@@ -86,14 +87,25 @@ public class PlayerActivity extends Activity {
 
             @Override
             public void error(String message) {
-                if (Api.ApiException.LOGIN_REQUIRED.equals(message)) {
+                boolean afterLogin = getIntent().getBooleanExtra(LoginActivity.EXTRA_AFTER_LOGIN, false);
+                if (Api.ApiException.LOGIN_REQUIRED.equals(message) && !afterLogin) {
                     // La sesión venció: pedimos iniciarla de nuevo y volvemos aquí.
+                    Intent again = new Intent(getIntent());
                     startActivity(new Intent(PlayerActivity.this, LoginActivity.class)
-                            .putExtra(LoginActivity.EXTRA_NEXT, getIntent()));
-                } else {
-                    Toast.makeText(PlayerActivity.this, message, Toast.LENGTH_LONG).show();
+                            .putExtra(LoginActivity.EXTRA_NEXT, again));
+                    finish();
+                    return;
                 }
-                finish();
+                if (Api.ApiException.LOGIN_REQUIRED.equals(message)) {
+                    message = "Iniciaste sesión, pero Ondamedia no aceptó la sesión para ver videos.";
+                }
+                loading.setVisibility(View.GONE);
+                new AlertDialog.Builder(PlayerActivity.this)
+                        .setTitle("No se pudo reproducir")
+                        .setMessage(message)
+                        .setPositiveButton("Volver", (d, w) -> finish())
+                        .setOnCancelListener(d -> finish())
+                        .show();
             }
         });
     }
