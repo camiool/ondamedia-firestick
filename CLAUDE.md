@@ -1,72 +1,59 @@
 # Ondamedia para Fire TV: contexto para continuar el trabajo
 
 ## Objetivo
-App Android para el **Amazon Fire TV Stick** que muestra **https://ondamedia.cl** (cine chileno
-gratuito) a pantalla completa y se maneja con el control remoto como una app de TV (estilo
-Netflix): las flechas saltan entre películas y botones, sin cursor. Se instala por sideload, no
-por la Amazon Appstore. El usuario habla español: responde y escribe los textos de la app en español.
+App para el **Amazon Fire TV Stick** para ver **Ondamedia** (cine chileno gratuito,
+ondamedia.cl) con el control remoto, con una interfaz estilo Netflix. Se instala por sideload.
+El usuario habla español: responde y escribe los textos de la app en español.
 
-## Decisión de diseño
-Se evaluó hacer una app 100 % nativa leyendo el catálogo de la API GraphQL de Mediastream
-(`next.mediastream.co/graphql`, la plataforma sobre la que corre ondamedia.cl). Se descartó:
-es una API privada sin documentar y habría que hacerse pasar por el sitio web. Por eso la app
-sigue usando el sitio normal en un WebView y le agrega navegación de TV con JS (`tvnav.js`).
-No volver a esa idea sin que el usuario lo pida explícitamente.
+## Ramas
+- `tv-navegacion`: versión WebView (el sitio web con navegación por flechas inyectada,
+  `assets/tvnav.js`). Funciona, pero es lenta y en el reproductor las teclas no llegan al iframe.
+  applicationId `cl.ondamedia.tv`.
+- `app-nativa` (esta): app nativa que usa la API del sitio. applicationId
+  `cl.ondamedia.tv.nativa`, para tener las dos instaladas y compararlas.
+  Si la nativa da problemas, el usuario prefiere volver a la WebView: no borrar esa rama.
 
-## Estado actual
-- Repo: https://github.com/camiool/ondamedia-firestick.
-- Compila local (`./gradlew assembleRelease`, JDK 17 de Homebrew en
-  `/opt/homebrew/opt/openjdk@17`) y en GitHub Actions.
-- Probado en un emulador Android 15 a 1920×1080 / 320 dpi (AVD `TV_1080p`, imagen de teléfono),
-  contra el sitio real: inicio, filas, carruseles, menú Explorar, ficha de película, login
-  (teclado), tráiler a pantalla completa y Atrás.
-- **No probado:** reproducir una película completa (requiere iniciar sesión) ni el rendimiento en
+## Decisión sobre la API
+ondamedia.cl corre sobre la plataforma OTT de Mediastream. La app usa su API GraphQL
+(`https://next.mediastream.co/graphql`, header `x-client-id` del sitio). Es una API privada sin
+documentar: el usuario lo sabe y autorizó usarla explícitamente el 2026-11-04. Puede cambiar
+sin aviso. Límite que respetamos: **no** falsificar `Referer`/origen ni saltarse los tokens; la
+reproducción usa el token que la API entrega a un usuario con sesión iniciada, igual que el sitio.
+
+- Catálogo (`getCategoriesPaginated` con `custom.content-home`, `getCategory`, `getShow`,
+  `getSeasons`, `getEpisodesPaginated`, `search2`): sin sesión.
+- Login: `POST https://next.mediastream.co/login` con JSON `{email, username, password,
+  grant_type: "password"}` → `data.access_token`. Se manda como `Authorization: Bearer`.
+  Los nombres exactos de los campos no se pudieron confirmar (no tenemos cuenta de prueba): si el
+  login falla, revisar eso primero.
+- Video: `getMedia(_id) { accessToken }` (requiere sesión) →
+  `https://mdstrm.com/video/{id}.m3u8?access_token=...` (HLS en ExoPlayer). Si ExoPlayer falla,
+  `EmbedPlayerActivity` abre `https://mdstrm.com/embed/{id}?access_token=...` en un WebView como
+  página principal y controla su `<video>` con JS.
+- Imágenes: el CDN acepta `?w=ANCHO` (ver `Api.img`).
+
+## Estructura (app/src/main/java/cl/ondamedia/tv)
+- `Api.java`: cliente HTTP/GraphQL, sesión (SharedPreferences "sesion"), modelos.
+- `HomeActivity`: panel de la película seleccionada + filas (`Rows`). Fila "Seguir viendo" local.
+- `Rows.java`: RecyclerView de filas y tarjetas; `AlignedLayoutManager` deja la selección
+  alineada a la izquierda/arriba como en las apps de TV.
+- `DetailActivity`, `SearchActivity`, `LoginActivity`.
+- `PlayerActivity`: ExoPlayer (media3 1.4.1) con teclas propias; guarda el progreso (`Progress`).
+- `EmbedPlayerActivity`: reproductor web de respaldo.
+- Dependencias: media3 (exoplayer, hls, ui), recyclerview, glide. compileSdk 34, minSdk 22.
+
+## Estado
+- Probado en emulador (AVD `TV_1080p`, 1920×1080): inicio, filas, carga de más títulos,
+  ficha, series con capítulos, búsqueda, pantalla de login.
+- **Sin probar:** login real y reproducción (requieren la cuenta del usuario), y el rendimiento en
   el Fire TV real.
-- Los PNG del ícono y del banner son provisionales.
 
-## Estructura
-- `app/src/main/assets/tvnav.js`: se inyecta en cada carga. Hace:
-  - viewport fijo de 1280 px de ancho CSS, para que el sitio use su diseño de escritorio (el
-    móvil tiene barra inferior y no se ve como TV);
-  - navegación espacial: `__tv.key(dir)` elige el siguiente elemento (izq/der: misma fila;
-    arriba/abajo: distancia vertical + 2× desvío horizontal, saltando elementos bajitos como
-    los títulos de fila). Los carruseles Swiper avanzan con `swiper.slideNext()` al llegar al borde,
-    y el autoplay del banner se detiene al seleccionar algo en él;
-  - un marco de selección propio (`#tv-ring`, `position:fixed`) que sigue al elemento en cada
-    frame. No se usa solo una clase CSS porque React la borra al volver a renderizar;
-  - OK devuelve `"tap:fx,fy"` y la app hace un toque real ahí. Así el sitio lo recibe como un
-    gesto del usuario, necesario para el historial (Atrás), el teclado y la pantalla completa;
-  - tras un OK, si aparece el iframe del reproductor (`mdstrm.com/embed`), lo pone a pantalla
-    completa (Fullscreen API, o CSS como alternativa). En el reproductor, `key()` devuelve
-    `"player"` y la app le manda las teclas (OK → espacio);
-  - recuerda la selección de cada página para restaurarla al volver con Atrás;
-  - `__tv.back()` / `__tv.closePlayer()` cierran el reproductor con el botón × del sitio.
-- `app/src/main/java/cl/ondamedia/tv/MainActivity.java`: WebView, pantalla de carga, inyección
-  del JS (`onPageStarted`, `onPageCommitVisible`, `onPageFinished`, `onProgressChanged`),
-  bloqueo de dominios de analítica, `dispatchKeyEvent`, pantalla completa
-  (`onShowCustomView`), puente `TVBridge.showKeyboard()` y modo cursor alternativo (tecla Menú).
-  En builds debug activa `WebView.setWebContentsDebuggingEnabled`.
-- `CursorView.java`: puntero del modo cursor alternativo.
-- `app/build.gradle`: AGP 8.7.3, Gradle 8.14.3, compileSdk/targetSdk 34, minSdk 22, Java 17.
-  `release` se firma con la clave debug. Sin dependencias externas.
-
-## Cómo depurar el JS en el emulador
-1. `./gradlew assembleDebug` e instala con `adb -s emulator-5554 install -r ...`.
-   **Usa siempre `-s` o `ANDROID_SERIAL`**: el Fire TV del usuario puede estar conectado por adb
-   en la red (192.168.1.82:5555) y un `adb install` sin serial le cae a él.
-2. `adb shell cat /proc/net/unix | grep webview_devtools_remote` y
-   `adb forward tcp:9222 localabstract:<socket>`.
-3. Evalúa JS con el protocolo de Chrome DevTools (`http://127.0.0.1:9222/json` → WebSocket,
-   `Runtime.evaluate`). `__tv.current()` devuelve el elemento seleccionado.
-4. Envía teclas con `adb shell input keyevent DPAD_DOWN|DPAD_CENTER|BACK...`.
-
-## Próximos pasos posibles
-1. Probar en el Fire TV real, con sesión iniciada, que "Ver ahora" reproduzca la película a
-   pantalla completa y que el rendimiento sea bueno.
-2. Si el sitio cambia sus clases (`preview-container-inner`, `next-player`, `button-chevron`,
-   `modal-action-button-icon`), ajustar `tvnav.js`.
-3. Mejorar el ícono y el banner (banner de 320×180 en `drawable`).
+## Cómo probar
+- Compilar: `JAVA_HOME=/opt/homebrew/opt/openjdk@17 ./gradlew assembleDebug`.
+- **Usa siempre `adb -s emulator-5554` o `ANDROID_SERIAL`**: el Fire TV del usuario suele estar
+  conectado por adb (192.168.1.82:5555) y un comando sin serial le cae a él.
+- `adb shell input keyevent DPAD_DOWN|DPAD_CENTER|BACK` y `adb exec-out screencap -p`.
 
 ## Restricciones
-- Debe funcionar sin Google Play Services, porque Fire OS no los tiene.
-- Mantenerlo simple y sin dependencias, salvo que sean necesarias.
+- Debe funcionar sin Google Play Services (Fire OS no los tiene).
+- No guardar contraseñas; solo el token de sesión.
