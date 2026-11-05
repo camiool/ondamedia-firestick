@@ -24,9 +24,13 @@ reproducción usa el token que la API entrega a un usuario con sesión iniciada,
   `getSeasons`, `getEpisodesPaginated`, `search2`): sin sesión.
 - Login: `POST https://next.mediastream.co/login` con JSON `{email, username, password,
   grant_type: "password"}` → `data.access_token`. Se manda como `Authorization: Bearer`.
-  Los nombres exactos de los campos no se pudieron confirmar (no tenemos cuenta de prueba): si el
-  login falla, revisar eso primero.
-- Video: `getMedia(_id) { accessToken }` (requiere sesión) →
+  Probado con la cuenta del usuario: funciona.
+- Las consultas con sesión mandan también `x-profile-id` (el `data.customer.profileId` del JWT
+  de sesión), como el sitio.
+- Video: `getMedia(_id) { accessToken(maxUse: $maxUse) }` (requiere sesión). **El argumento
+  `maxUse` es obligatorio aunque vaya vacío**: sin él la API responde
+  `UNAUTHORIZED_GET_ACCESS_TOKEN` incluso con sesión válida (verificado el 2026-11-04 comparando
+  con el sitio). El HLS es H.264/AAC sin DRM →
   `https://mdstrm.com/video/{id}.m3u8?access_token=...` (HLS en ExoPlayer). Si ExoPlayer falla,
   `EmbedPlayerActivity` abre `https://mdstrm.com/embed/{id}?access_token=...` en un WebView como
   página principal y controla su `<video>` con JS.

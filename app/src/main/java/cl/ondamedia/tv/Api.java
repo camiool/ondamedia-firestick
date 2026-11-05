@@ -267,7 +267,10 @@ public final class Api {
         run(cb, () -> {
             if (!isLoggedIn()) throw new ApiException(ApiException.LOGIN_REQUIRED);
             ensureProfile();
-            String q = "query($id:String!){ getMedia(_id:$id) { _id title duration accessToken } }";
+            // Ojo: accessToken tiene que ir con el argumento maxUse (aunque vaya vacío), como lo pide
+            // el sitio. Sin el argumento, la API responde UNAUTHORIZED_GET_ACCESS_TOKEN.
+            String q = "query getPlayerMedia($id:String!,$maxUse:Int){ getMedia(_id:$id) "
+                    + "{ _id title duration accessToken(maxUse:$maxUse) } }";
             JSONObject data;
             try {
                 data = graphql(q, new JSONObject().put("id", mediaId));
